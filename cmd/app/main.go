@@ -207,7 +207,7 @@ const htmlTemplate = `
     </style>
 </head>
 <body>
-    <h1>Flight Statuses</h1>
+    <h1>Who the hell is flying over</h1>
     <table>
         <thead>
             <tr>
