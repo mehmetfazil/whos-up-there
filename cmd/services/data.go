@@ -14,55 +14,38 @@ import (
 	"github.com/mehmetfazil/whos-up-there/types"
 )
 
-var Url string
-var Db string
-
-const Radius = 10.0
-
-func init() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
-
-	lat := os.Getenv("LAT")
-	long := os.Getenv("LONG")
-	Db = os.Getenv("DB")
-
-	Url = fmt.Sprintf("https://api.airplanes.live/v2/point/%s/%s/%f", lat, long, Radius)
-
-}
+var (
+	conn     *pgx.Conn
+	apiUrl   string
+	interval = 2 * time.Second
+	radius   = 10.0
+)
 
 func main() {
-
-	connStr := Db
-
-	// Connect to the database
-	conn, err := pgx.Connect(context.Background(), connStr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
-		os.Exit(1)
+	if err := loadConfig(); err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
+
+	// Ensure the database connection is closed when the program exits
 	defer conn.Close(context.Background())
 
-	ticker := time.NewTicker(2 * time.Second)
+	// Start the data collection
+	collectLiveFeed(interval, apiUrl, conn)
+}
+
+func collectLiveFeed(interval time.Duration, apiUrl string, conn *pgx.Conn) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			err := fetchAndStore(conn)
-			if err != nil {
-				fmt.Printf("Error: %v\n", err)
-			}
+	for range ticker.C {
+		if err := fetchAndStore(apiUrl, conn); err != nil {
+			log.Printf("Error: %v", err)
 		}
 	}
 }
 
-func fetchAndStore(conn *pgx.Conn) error {
-
-	// Fetch the data
-	resp, err := http.Get(Url) // Replace with actual API URL
+func fetchAndStore(apiUrl string, conn *pgx.Conn) error {
+	resp, err := http.Get(apiUrl)
 	if err != nil {
 		return fmt.Errorf("error fetching data: %v", err)
 	}
@@ -72,45 +55,78 @@ func fetchAndStore(conn *pgx.Conn) error {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	var apiResp types.ApiResponse
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(&apiResp); err != nil {
-		return fmt.Errorf("error decoding JSON: %v", err)
+	// Decode only the "ac" and "now" fields from the JSON response
+	// https://airplanes.live/rest-api-adsb-data-field-descriptions/
+	var response struct {
+		Ac  []types.Aircraft `json:"ac"`
+		Now int64            `json:"now"`
 	}
 
-	// Get current timestamp
-	timestamp := time.Now()
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("error decoding JSON: %w", err)
+	}
 
-	// Insert each aircraft into the database
-	for _, ac := range apiResp.Ac {
-		err := insertAircraft(conn, ac, timestamp)
+	timestamp := time.UnixMilli(response.Now)
+
+	// Prepare a batch for inserting multiple records
+	batch := &pgx.Batch{}
+	for _, ac := range response.Ac {
+		sql := `INSERT INTO live (
+				timestamp, hex_code, message_type, flight_number, registration, aircraft_type, description, operator, manufacture_year,
+				barometric_altitude, is_ground, ground_speed, wind_direction, wind_speed, track_angle, latitude, longitude,
+				position_age, distance, direction
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8, $9,
+				$10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+			)`
+
+		batch.Queue(sql,
+			timestamp, ac.HexCode, ac.MessageType, ac.FlightNumber, ac.Registration, ac.AircraftType,
+			ac.Description, ac.Operator, ac.ManufactureYear,
+			ac.BarometricAltitude.Altitude, ac.BarometricAltitude.IsGround, ac.GroundSpeed,
+			ac.WindDirection, ac.WindSpeed, ac.TrackAngle,
+			ac.Latitude, ac.Longitude, ac.PositionAge,
+			ac.Distance, ac.Direction,
+		)
+	}
+
+	br := conn.SendBatch(context.Background(), batch)
+
+	// Iterate over the batch results to handle any errors
+	for i := 0; i < batch.Len(); i++ {
+		_, err := br.Exec()
 		if err != nil {
-			fmt.Printf("Error inserting aircraft %s: %v\n", ac.HexCode, err)
-			// Continue with next aircraft
+			log.Printf("Error inserting record %d: %v", i, err)
 		}
+	}
+
+	if err := br.Close(); err != nil {
+		return fmt.Errorf("error closing batch: %w", err)
 	}
 
 	return nil
 }
 
-func insertAircraft(conn *pgx.Conn, ac types.Aircraft, timestamp time.Time) error {
-	// Prepare the SQL statement
-	sql := `INSERT INTO live (
-        timestamp, hex_code, message_type, flight_number, registration, aircraft_type, description, operator, manufacture_year,
-        barometric_altitude, is_ground, ground_speed, wind_direction, wind_speed, track_angle, latitude, longitude,
-        position_age, distance, direction
-    ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9,
-        $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
-    )`
+func loadConfig() error {
+	if err := godotenv.Load(); err != nil {
+		return fmt.Errorf("error loading .env file: %w", err)
+	}
 
-	_, err := conn.Exec(context.Background(), sql,
-		timestamp, ac.HexCode, ac.MessageType, ac.FlightNumber, ac.Registration, ac.AircraftType, ac.Description, ac.Operator, ac.ManufactureYear,
-		ac.BarometricAltitude.Altitude, ac.BarometricAltitude.IsGround, ac.GroundSpeed,
-		ac.WindDirection, ac.WindSpeed,
-		ac.TrackAngle, ac.Latitude, ac.Longitude,
-		ac.PositionAge, ac.Distance, ac.Direction,
-	)
+	dbURL := os.Getenv("DB")
+	lat := os.Getenv("LAT")
+	long := os.Getenv("LONG")
 
-	return err
+	if dbURL == "" || lat == "" || long == "" {
+		return fmt.Errorf("missing required environment variables")
+	}
+
+	apiUrl = fmt.Sprintf("https://api.airplanes.live/v2/point/%s/%s/%f", lat, long, radius)
+
+	var err error
+	conn, err = pgx.Connect(context.Background(), dbURL)
+	if err != nil {
+		return fmt.Errorf("unable to connect to database: %w", err)
+	}
+
+	return nil
 }
