@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Who the hell's flying over</title>
+    <link href="/web/dist/output.css" rel="stylesheet">
+
+    <!-- Use @font-face to load DepartureMono -->
+    <style>
+        @font-face {
+            font-family: 'DepartureMono';
+            src: url('/web/dist/DepartureMono-Regular.woff2') format('woff2');
+            font-weight: normal;
+            font-style: normal;
+        }
+        
+        /* Apply DepartureMono globally */
+        .airport-font {
+            font-family: 'DepartureMono', monospace;
+            font-size: 11px;  /* Use the size designed for the font */
+        }
+    </style>
+
+</head>
+<body class="bg-gatwickGray text-gray-100 airport-font">
+    <div class="container mx-auto p-8">
+        <h1 class="text-4xl font-bold text-center mb-8 text-orange-500">Who the hell's flying over?</h1>
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white overflow-hidden">
+                <thead class="bg-gatwickGray text-gray-100">
+                    <tr>
+                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Flight Number</th>
+                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Registration</th>
+                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Aircraft Type</th>
+                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Operator</th>
+                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Distance (km)</th>
+                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Time</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-gray-50 divide-y divide-gatwickGray">
+                    {{range .}}
+                    <tr class="hover:bg-gray-100 transition">
+                        <td class="px-6 py-4 text-gray-900">{{.FlightNumber}}</td>
+                        <td class="px-6 py-4 text-gray-600">{{.Registration}}</td>
+                        <td class="px-6 py-4 text-gray-600">{{.AircraftType}}</td>
+                        <td class="px-6 py-4 text-gray-600">{{.Operator}}</td>
+                        <td class="px-6 py-4 text-gray-600">{{.Status}}</td>
+                        <td class="px-6 py-4 text-gray-600">{{printf "%.2f" .Distance}}</td>
+                        <td class="px-6 py-4 text-gray-600">{{.Time}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

@@ -15,7 +15,7 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmpl := template.Must(template.ParseFiles("templates/flights.html"))
+	tmpl := template.Must(template.ParseFiles("web/templates/flights.html"))
 	err = tmpl.Execute(w, flights)
 	if err != nil {
 		http.Error(w, "Template execution error", http.StatusInternalServerError)

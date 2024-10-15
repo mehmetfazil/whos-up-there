@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"log"
 	"net/http"
 	"os"
@@ -9,6 +10,9 @@ import (
 	"github.com/mehmetfazil/whos-up-there/db"
 	"github.com/mehmetfazil/whos-up-there/handlers"
 )
+
+//go:embed web/dist/*
+var content embed.FS
 
 func main() {
 
@@ -21,14 +25,15 @@ func main() {
 	}
 	defer db.Close()
 
+	http.Handle("/web/dist/", http.FileServer(http.FS(content)))
+
 	http.HandleFunc("/", handlers.HomeHandler)
 
 	port := os.Getenv("PORT")
-
 	if port == "" {
-		log.Fatal("PORT environment variable is not set")
+		log.Fatal("Port is not defined")
 	}
-	log.Printf("Starting server on :%s...\n", port)
-	log.Fatal(http.ListenAndServe(":9000", nil))
 
+	log.Printf("Starting server on :%s...\n", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
