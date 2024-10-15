@@ -28,6 +28,7 @@ func main() {
 	http.Handle("/web/dist/", http.FileServer(http.FS(content)))
 
 	http.HandleFunc("/", handlers.HomeHandler)
+	http.HandleFunc("/api/flights", handlers.FlightsAPIHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {

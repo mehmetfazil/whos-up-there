@@ -2,11 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Who the hell's flying over</title>
+    <title>Who the Hell's Flying Over?</title>
     <link href="/web/dist/output.css" rel="stylesheet">
-
-    <!-- Use @font-face to load DepartureMono -->
     <style>
         @font-face {
             font-family: 'DepartureMono';
@@ -14,46 +11,90 @@
             font-weight: normal;
             font-style: normal;
         }
-        
-        /* Apply DepartureMono globally */
+    
         .airport-font {
             font-family: 'DepartureMono', monospace;
-            font-size: 11px;  /* Use the size designed for the font */
+            font-size: 11px;
         }
     </style>
-
 </head>
-<body class="bg-gatwickGray text-gray-100 airport-font">
+<body class="bg-gray-100 text-gray-900 airport-font">
     <div class="container mx-auto p-8">
-        <h1 class="text-4xl font-bold text-center mb-8 text-orange-500">Who the hell's flying over?</h1>
+        <h1 class="text-4xl font-bold text-center mb-8">Who the Hell's Flying Over?</h1>
         <div class="overflow-x-auto">
-            <table class="min-w-full bg-white overflow-hidden">
-                <thead class="bg-gatwickGray text-gray-100">
+            <table class="min-w-full bg-white">
+                <thead class="bg-gray-800 text-white">
                     <tr>
-                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Flight Number</th>
-                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Registration</th>
-                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Aircraft Type</th>
-                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Operator</th>
-                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Status</th>
-                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Distance (km)</th>
-                        <th class="px-6 py-3 text-left font-medium uppercase tracking-wider">Time</th>
+                        <th class="px-6 py-3 text-left uppercase tracking-wider">Hex Code</th>
+                        <th class="px-6 py-3 text-left uppercase tracking-wider">Flight Number</th>
+                        <th class="px-6 py-3 text-left uppercase tracking-wider">Distance (km)</th>
+                        <th class="px-6 py-3 text-left uppercase tracking-wider">Timestamp</th>
+                        <th class="px-6 py-3 text-left uppercase tracking-wider">Status</th>
                     </tr>
                 </thead>
-                <tbody class="bg-gray-50 divide-y divide-gatwickGray">
-                    {{range .}}
-                    <tr class="hover:bg-gray-100 transition">
-                        <td class="px-6 py-4 text-gray-900">{{.FlightNumber}}</td>
-                        <td class="px-6 py-4 text-gray-600">{{.Registration}}</td>
-                        <td class="px-6 py-4 text-gray-600">{{.AircraftType}}</td>
-                        <td class="px-6 py-4 text-gray-600">{{.Operator}}</td>
-                        <td class="px-6 py-4 text-gray-600">{{.Status}}</td>
-                        <td class="px-6 py-4 text-gray-600">{{printf "%.2f" .Distance}}</td>
-                        <td class="px-6 py-4 text-gray-600">{{.Time}}</td>
-                    </tr>
-                    {{end}}
+                <tbody id="flight-table-body" class="divide-y divide-gray-200">
+                    <!-- Dynamic flight data will be inserted here -->
                 </tbody>
             </table>
         </div>
     </div>
+
+    <!-- JavaScript for dynamic updates -->
+    <script>
+        let flightsData = [];
+
+        // Fetch flight data from the API every 10 seconds
+        function fetchFlights() {
+            fetch('/api/flights')
+                .then(response => response.json())
+                .then(data => {
+                    flightsData = data;
+                    updateFlightTable(); // Update the table with new data
+                })
+                .catch(error => console.error('Error fetching flight data:', error));
+        }
+
+        // Calculate how long ago the timestamp was from now
+        function calculateTimeDifference(timestamp) {
+            const now = new Date().getTime();
+            const flightTime = new Date(timestamp).getTime();
+            const timeDifference = (now - flightTime) / 1000; // Difference in seconds
+
+            if (timeDifference < 60) {
+                return `${Math.floor(timeDifference)} seconds ago`;
+            } else {
+                const minutesAgo = Math.floor(timeDifference / 60);
+                return `${minutesAgo} minutes ago`;
+            }
+        }
+
+        // Update the flight table with new data
+        function updateFlightTable() {
+            const tableBody = document.getElementById('flight-table-body');
+            tableBody.innerHTML = ''; // Clear existing rows
+
+            flightsData.forEach(flight => {
+                const row = document.createElement('tr');
+                const statusText = calculateTimeDifference(flight.LatestTimestamp);
+
+                // Insert flight data into the table with full timestamp and status
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">${flight.HexCode}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${flight.FlightNumber}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${parseFloat(flight.LatestDistance).toFixed(2)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${new Date(flight.LatestTimestamp).toLocaleString()}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${statusText}</td>
+                `;
+
+                tableBody.appendChild(row); // Append the new row to the table body
+            });
+        }
+
+        // Fetch new flight data every 10 seconds
+        setInterval(fetchFlights, 10000);
+
+        // Initial fetch
+        fetchFlights();
+    </script>
 </body>
 </html>
